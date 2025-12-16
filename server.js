@@ -9,8 +9,6 @@ const path = require('path');
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
-
-// --- KRİTİK NOKTA: Public klasörünü dışarı aç ---
 app.use(express.static(path.join(__dirname, 'public')));
 
 const server = http.createServer(app);
@@ -23,18 +21,23 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('MongoDB Baglandi'))
     .catch((err) => console.log('MongoDB Hatasi:', err));
 
+// --- GÜNCELLENMİŞ ŞEMA ---
 const MessageSchema = new mongoose.Schema({
     room: String,
     username: String,
     text: String,
     image: String,
     audio: String,
+    location: String, // Yeni: Konum Linki
+    replyTo: {        // Yeni: Yanıt Bilgisi
+        username: String,
+        text: String
+    },
     createdAt: { type: Date, default: Date.now },
     isDeleted: { type: Boolean, default: false }
 });
 const Message = mongoose.model('Message', MessageSchema);
 
-// --- SOCKET LOGIC ---
 io.on('connection', (socket) => {
     socket.on('join room', async ({ username, room }) => {
         socket.join(room);
@@ -56,14 +59,19 @@ io.on('connection', (socket) => {
             room: data.room,
             username: data.username,
             text: data.text,
-            image: data.image
+            image: data.image,
+            audio: data.audio,
+            location: data.location,
+            replyTo: data.replyTo
         });
         const savedMsg = await newMessage.save();
         io.to(data.room).emit('chat message', savedMsg);
     });
 
     socket.on('delete message', async ({ msgId, room }) => {
-        const updatedMsg = await Message.findByIdAndUpdate(msgId, { isDeleted: true, text: null, image: null }, { new: true });
+        const updatedMsg = await Message.findByIdAndUpdate(msgId, { 
+            isDeleted: true, text: null, image: null, audio: null, location: null 
+        }, { new: true });
         if (updatedMsg) io.to(room).emit('message updated', updatedMsg);
     });
 

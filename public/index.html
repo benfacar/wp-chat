@@ -3,19 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WhatsApp Ultimate</title>
+    <title>WhatsApp Ultra</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#008069">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/124/124034.png">
+    
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.4/dist/index.min.js"></script>
 </head>
 <body>
     <audio id="notification-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"></audio>
 
     <div id="login-screen">
         <div id="login-box">
-            <h2>WhatsApp Giris</h2>
-            <input type="text" id="username-input" class="login-input" placeholder="Adiniz" autocomplete="off">
-            <input type="text" id="room-input" class="login-input" placeholder="Oda Ismi" autocomplete="off">
-            <button id="join-btn">Sohbete Katil</button>
+            <h2>WhatsApp Giriş</h2>
+            <input type="text" id="username-input" class="login-input" placeholder="Adınız" autocomplete="off">
+            <input type="text" id="room-input" class="login-input" placeholder="Oda İsmi" autocomplete="off">
+            <button id="join-btn">Sohbete Katıl</button>
         </div>
     </div>
 
@@ -24,25 +31,31 @@
             <div class="avatar"><i class="fas fa-users"></i></div>
             <div class="header-info">
                 <div class="header-name">Sohbet <span id="room-display" style="font-weight:normal; font-size:0.8em"></span></div>
-                <div class="header-status" id="status-text">Baglaniyor...</div>
+                <div class="header-status" id="status-text">Bağlanıyor...</div>
             </div>
         </header>
 
         <div id="chat-area"></div>
 
         <div id="footer">
-            <button class="icon-btn" onclick="document.getElementById('file-input').click()" title="Fotoğraf Gönder">
-                <i class="fas fa-paperclip"></i>
-            </button>
-            <input type="file" id="file-input" accept="image/*">
+            <div id="reply-preview" style="display: none;">
+                <span id="reply-user"></span>
+                <span id="reply-text"></span>
+                <i class="fas fa-times" onclick="cancelReply()"></i>
+            </div>
 
-            <button class="icon-btn" id="mic-btn" title="Ses Kaydet (Basılı Tut)">
-                <i class="fas fa-microphone"></i>
-            </button>
+            <div class="footer-buttons">
+                <button class="icon-btn" id="emoji-btn"><i class="far fa-smile"></i></button>
+                <button class="icon-btn" onclick="document.getElementById('file-input').click()"><i class="fas fa-paperclip"></i></button>
+                <input type="file" id="file-input" accept="image/*">
+                <button class="icon-btn" id="location-btn"><i class="fas fa-map-marker-alt"></i></button>
+            </div>
 
-            <form id="chat-form" style="flex: 1; display: flex; gap: 5px;">
-                <input type="text" id="message-input" placeholder="Mesaj yazın" autocomplete="off">
-                <button class="icon-btn" style="color: #008069;"><i class="fas fa-paper-plane"></i></button>
+            <form id="chat-form" style="flex: 1; display: flex; gap: 5px; align-items: center;">
+                <input type="text" id="message-input" placeholder="Mesaj..." autocomplete="off">
+                
+                <button type="button" class="icon-btn" id="mic-btn"><i class="fas fa-microphone"></i></button>
+                <button type="submit" class="icon-btn send-btn" id="send-btn" style="display:none"><i class="fas fa-paper-plane"></i></button>
             </form>
         </div>
     </div>
