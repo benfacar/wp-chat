@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WhatsApp Master</title>
+    <title>WhatsApp Expert</title>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#008069">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.4/dist/index.min.js"></script>
@@ -18,9 +17,7 @@
         <div class="video-container">
             <video id="remote-video" autoplay playsinline></video>
             <video id="local-video" autoplay playsinline muted></video>
-            <div class="video-controls">
-                <button id="end-call-btn"><i class="fas fa-phone-slash"></i></button>
-            </div>
+            <div class="video-controls"><button id="end-call-btn"><i class="fas fa-phone-slash"></i></button></div>
             <div id="incoming-call-ui" class="hidden">
                 <span id="caller-name">Arıyor...</span>
                 <div class="call-actions">
@@ -31,18 +28,28 @@
         </div>
     </div>
 
+    <div id="users-modal" class="hidden">
+        <div class="users-box">
+            <h3>Odada Kimler Var?</h3>
+            <ul id="users-list"></ul>
+            <button onclick="document.getElementById('users-modal').classList.add('hidden')">Kapat</button>
+        </div>
+    </div>
+
     <div id="login-screen">
         <div id="login-box">
             <h2>WhatsApp Giriş</h2>
             <input type="text" id="username-input" class="login-input" placeholder="Adınız" autocomplete="off">
             <input type="text" id="room-input" class="login-input" placeholder="Oda İsmi" autocomplete="off">
+            <input type="password" id="password-input" class="login-input" placeholder="Oda Şifresi (Oluştur/Gir)" autocomplete="off">
             <button id="join-btn">Sohbete Katıl</button>
+            <p style="font-size:11px; color:#555; margin-top:10px;">* Odayı ilk kuran şifreyi belirler.</p>
         </div>
     </div>
 
     <div id="app-container">
         <header>
-            <div class="header-left">
+            <div class="header-left" onclick="toggleUserList()" style="cursor:pointer">
                 <div class="avatar-wrapper">
                     <div class="avatar"><i class="fas fa-users"></i></div>
                     <div id="online-indicator" class="online-dot hidden"></div>
@@ -53,8 +60,8 @@
                 </div>
             </div>
             <div class="header-actions">
-                <button id="video-call-btn" title="Görüntülü Ara"><i class="fas fa-video"></i></button>
-                <button id="theme-btn" title="Karanlık Mod"><i class="fas fa-moon"></i></button>
+                <button id="video-call-btn"><i class="fas fa-video"></i></button>
+                <button id="theme-btn"><i class="fas fa-moon"></i></button>
             </div>
         </header>
 
@@ -62,18 +69,14 @@
 
         <div id="footer">
             <div id="reply-preview" style="display: none;">
-                <span id="reply-user"></span>
-                <span id="reply-text"></span>
-                <i class="fas fa-times" onclick="cancelReply()"></i>
+                <span id="reply-user"></span><span id="reply-text"></span><i class="fas fa-times" onclick="cancelReply()"></i>
             </div>
-
             <div class="footer-buttons">
                 <button class="icon-btn" id="emoji-btn"><i class="far fa-smile"></i></button>
                 <button class="icon-btn" onclick="document.getElementById('file-input').click()"><i class="fas fa-paperclip"></i></button>
                 <input type="file" id="file-input" accept="image/*">
                 <button class="icon-btn" id="location-btn"><i class="fas fa-map-marker-alt"></i></button>
             </div>
-
             <form id="chat-form" style="flex: 1; display: flex; gap: 5px; align-items: center;">
                 <input type="text" id="message-input" placeholder="Mesaj..." autocomplete="off">
                 <button type="button" class="icon-btn" id="mic-btn"><i class="fas fa-microphone"></i></button>
@@ -81,7 +84,6 @@
             </form>
         </div>
     </div>
-
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js"></script>
 </body>
