@@ -32,7 +32,7 @@
         <div class="gif-container">
             <h3>GIF Gönder</h3>
             <div id="gif-grid"></div>
-            <button onclick="document.getElementById('gif-modal').classList.add('hidden')">Kapat</button>
+            <button onclick="document.getElementById('gif-modal').classList.add('hidden')" style="margin-top:10px; padding:10px;">Kapat</button>
         </div>
     </div>
 
@@ -55,7 +55,7 @@
         <div class="users-box">
             <h3>Odada Kimler Var?</h3>
             <ul id="users-list"></ul>
-            <button onclick="document.getElementById('users-modal').classList.add('hidden')">Kapat</button>
+            <button onclick="document.getElementById('users-modal').classList.add('hidden')" style="width:100%; padding:10px; margin-top:10px;">Kapat</button>
         </div>
     </div>
 
@@ -71,7 +71,7 @@
 
     <div id="app-container">
         <header>
-            <div class="header-left" onclick="toggleUserList()">
+            <div class="header-left" id="header-user-area">
                 <div class="avatar-wrapper">
                     <div class="avatar"><i class="fas fa-users"></i></div>
                     <div id="online-indicator" class="online-dot hidden"></div>
@@ -100,13 +100,15 @@
                 <input type="file" id="file-input" accept="image/*">
                 <button class="icon-btn" id="location-btn"><i class="fas fa-map-marker-alt"></i></button>
             </div>
-            <form id="chat-form" style="flex: 1; display: flex; gap: 5px; align-items: center;">
+            
+            <div id="chat-input-area" style="flex: 1; display: flex; gap: 5px; align-items: center;">
                 <input type="text" id="message-input" placeholder="Mesaj..." autocomplete="off">
                 <button type="button" class="icon-btn" id="mic-btn"><i class="fas fa-microphone"></i></button>
-                <button type="submit" class="icon-btn send-btn" id="send-btn" style="display:none"><i class="fas fa-paper-plane"></i></button>
-            </form>
+                <button type="button" class="icon-btn send-btn" id="send-btn" style="display:none"><i class="fas fa-paper-plane"></i></button>
+            </div>
         </div>
     </div>
+    
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js"></script>
 </body>
