@@ -5,10 +5,16 @@ const { Server } = require("socket.io");
 const mongoose = require('mongoose');
 const cors = require('cors');
 
+// --- AYARLAR ---
+// Fotoğraflar büyük olabileceği için limitleri artırıyoruz
 const app = express();
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
+    cors: { origin: "*", methods: ["GET", "POST"] },
+    maxHttpBufferSize: 1e8 // 100 MB'a kadar izin ver (Socket için)
 });
 
 // --- VERİTABANI ---
@@ -16,98 +22,106 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('MongoDB Bağlantısı Başarılı!'))
     .catch((err) => console.log('MongoDB Hatası:', err));
 
+// Şema güncellendi: 'room' ve 'image' eklendi
 const MessageSchema = new mongoose.Schema({
+    room: String,
     username: String,
     text: String,
+    image: String, // Fotoğraf verisi burada tutulacak
     createdAt: { type: Date, default: Date.now }
 });
 const Message = mongoose.model('Message', MessageSchema);
 
-// --- WHATSAPP GÖRÜNÜMLÜ HTML (Frontend) ---
+// --- FRONTEND (HTML/CSS/JS) ---
 const htmlContent = `
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WhatsApp Klonu</title>
+    <title>WhatsApp Ultra</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        /* Genel Ayarlar */
         * { box-sizing: border-box; }
         body { margin: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #d1d7db; height: 100vh; display: flex; justify-content: center; overflow: hidden; }
         
-        /* Giriş Ekranı */
+        /* GİRİŞ EKRANI */
         #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #00a884; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
-        #login-box { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); text-align: center; width: 80%; max-width: 300px; }
-        #login-box h2 { color: #00a884; margin-top: 0; }
-        #username-input { width: 100%; padding: 10px; margin: 15px 0; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; outline: none; }
-        #join-btn { background: #00a884; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; }
+        #login-box { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); text-align: center; width: 85%; max-width: 350px; display: flex; flex-direction: column; gap: 15px; }
+        #login-box h2 { color: #00a884; margin: 0 0 10px 0; }
+        .login-input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; outline: none; }
+        #join-btn { background: #00a884; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; }
         
-        /* Ana Uygulama */
+        /* ANA EKRAN */
         #app-container { width: 100%; max-width: 500px; background: #e5ddd5; display: none; flex-direction: column; height: 100%; box-shadow: 0 0 20px rgba(0,0,0,0.1); position: relative; }
         
-        /* Başlık (Header) */
         header { background-color: #008069; color: white; padding: 10px 15px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); z-index: 10; }
         .avatar { width: 40px; height: 40px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #008069; font-size: 20px; }
         .header-info { flex: 1; }
         .header-name { font-weight: bold; font-size: 1.1rem; }
-        .header-status { font-size: 0.8rem; opacity: 0.8; }
+        .room-badge { font-size: 0.75rem; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
         
-        /* Sohbet Alanı */
         #chat-area { flex: 1; overflow-y: auto; padding: 15px; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-repeat: repeat; display: flex; flex-direction: column; gap: 8px; }
         
-        /* Mesaj Balonları */
         .message-row { display: flex; width: 100%; }
         .my-message { justify-content: flex-end; }
         .other-message { justify-content: flex-start; }
         
-        .bubble { max-width: 75%; padding: 6px 10px; border-radius: 8px; position: relative; font-size: 15px; line-height: 1.4; box-shadow: 0 1px 1px rgba(0,0,0,0.1); word-wrap: break-word; }
+        .bubble { max-width: 75%; padding: 6px 8px; border-radius: 8px; position: relative; font-size: 15px; line-height: 1.4; box-shadow: 0 1px 1px rgba(0,0,0,0.1); word-wrap: break-word; display: flex; flex-direction: column; }
         .my-message .bubble { background-color: #d9fdd3; border-top-right-radius: 0; }
         .other-message .bubble { background-color: #fff; border-top-left-radius: 0; }
         
-        .sender-name { font-size: 0.75rem; color: #e542a3; font-weight: bold; margin-bottom: 2px; display: block; }
-        .my-message .sender-name { display: none; } /* Kendi ismimiz yazmasın */
+        .sender-name { font-size: 0.75rem; color: #e542a3; font-weight: bold; margin-bottom: 2px; }
+        .my-message .sender-name { display: none; }
         
-        .meta { display: flex; justify-content: flex-end; align-items: center; gap: 4px; font-size: 0.65rem; color: #999; margin-top: 2px; margin-left: 10px; }
-        .tick { color: #53bdeb; } /* Mavi Tik Rengi */
+        /* Fotoğraf Stili */
+        .msg-image { max-width: 100%; border-radius: 5px; margin-top: 5px; cursor: pointer; }
         
-        /* Alt Kısım (Input) */
-        #footer { background: #f0f2f5; padding: 10px; display: flex; align-items: center; gap: 10px; }
-        #message-input { flex: 1; padding: 12px; border: none; border-radius: 20px; outline: none; font-size: 16px; }
-        #send-btn { background: transparent; border: none; color: #008069; font-size: 24px; cursor: pointer; }
+        .meta { display: flex; justify-content: flex-end; align-items: center; gap: 4px; font-size: 0.65rem; color: #999; margin-top: 2px; align-self: flex-end; }
+        .tick { color: #53bdeb; }
+        
+        #footer { background: #f0f2f5; padding: 8px; display: flex; align-items: center; gap: 8px; min-height: 60px; }
+        #message-input { flex: 1; padding: 10px 15px; border: none; border-radius: 20px; outline: none; font-size: 16px; height: 40px; }
+        
+        .icon-btn { background: none; border: none; color: #54656f; font-size: 22px; cursor: pointer; padding: 5px; }
+        .send-btn { color: #008069; }
+        
+        /* Dosya Seçiciyi Gizle */
+        #file-input { display: none; }
     </style>
 </head>
 <body>
 
     <div id="login-screen">
         <div id="login-box">
-            <h2>WhatsApp Web</h2>
-            <p>Sohbete katılmak için ismini gir</p>
-            <form id="login-form">
-                <input type="text" id="username-input" placeholder="Adınız..." autocomplete="off" required>
-                <button type="submit" id="join-btn">Sohbete Başla</button>
-            </form>
+            <h2>WhatsApp Giriş</h2>
+            <input type="text" id="username-input" class="login-input" placeholder="Adınız (Örn: Ahmet)" autocomplete="off">
+            <input type="text" id="room-input" class="login-input" placeholder="Oda İsmi (Örn: Aile)" autocomplete="off">
+            <button id="join-btn">Sohbete Katıl</button>
         </div>
     </div>
 
     <div id="app-container">
         <header>
-            <div class="avatar"><i class="fas fa-user"></i></div>
+            <div class="avatar"><i class="fas fa-users"></i></div>
             <div class="header-info">
-                <div class="header-name">Grup Sohbeti</div>
-                <div class="header-status">Çevrimiçi</div>
+                <div class="header-name">Sohbet <span id="room-display" class="room-badge">Genel</span></div>
+                <div class="header-status" style="font-size: 0.8rem;">çevrimiçi</div>
             </div>
-            <i class="fas fa-ellipsis-v" style="color: white; cursor: pointer;"></i>
+            <i class="fas fa-ellipsis-v" style="color: white;"></i>
         </header>
 
         <div id="chat-area"></div>
 
         <div id="footer">
-            <i class="far fa-smile" style="color: #54656f; font-size: 24px; cursor: pointer;"></i>
-            <form id="chat-form" style="flex: 1; display: flex;">
-                <input type="text" id="message-input" placeholder="Bir mesaj yazın" autocomplete="off">
-                <button id="send-btn"><i class="fas fa-paper-plane"></i></button>
+            <button class="icon-btn" onclick="document.getElementById('file-input').click()">
+                <i class="fas fa-paperclip"></i>
+            </button>
+            <input type="file" id="file-input" accept="image/*">
+
+            <form id="chat-form" style="flex: 1; display: flex; gap: 5px;">
+                <input type="text" id="message-input" placeholder="Mesaj yazın" autocomplete="off">
+                <button class="icon-btn send-btn"><i class="fas fa-paper-plane"></i></button>
             </form>
         </div>
     </div>
@@ -116,29 +130,38 @@ const htmlContent = `
     <script>
         const socket = io();
         let myUsername = "";
+        let myRoom = "";
 
-        // DOM Elementleri
+        // Elementler
         const loginScreen = document.getElementById('login-screen');
-        const loginForm = document.getElementById('login-form');
         const usernameInput = document.getElementById('username-input');
+        const roomInput = document.getElementById('room-input');
+        const joinBtn = document.getElementById('join-btn');
         const appContainer = document.getElementById('app-container');
         const chatArea = document.getElementById('chat-area');
         const chatForm = document.getElementById('chat-form');
         const messageInput = document.getElementById('message-input');
+        const fileInput = document.getElementById('file-input');
+        const roomDisplay = document.getElementById('room-display');
 
-        // Giriş Yapma
-        loginForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            if (usernameInput.value.trim()) {
+        // Odaya Katılma
+        joinBtn.addEventListener('click', () => {
+            if (usernameInput.value && roomInput.value) {
                 myUsername = usernameInput.value.trim();
+                myRoom = roomInput.value.trim();
+                
+                // Sunucuya odaya katılma isteği gönder
+                socket.emit('join room', { username: myUsername, room: myRoom });
+
+                roomDisplay.textContent = myRoom;
                 loginScreen.style.display = 'none';
                 appContainer.style.display = 'flex';
-                // Eski mesajları talep et (Socket bağlandığında otomatik gelir ama burada bekleyelim)
-                window.scrollTo(0, document.body.scrollHeight);
+            } else {
+                alert("Lütfen isim ve oda ismi girin!");
             }
         });
 
-        // Mesaj Ekleme Fonksiyonu
+        // Mesaj Ekleme
         function appendMessage(data) {
             const isOwn = data.username === myUsername;
             const time = new Date(data.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -149,15 +172,23 @@ const htmlContent = `
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
 
-            // Başkasının mesajıysa ismini göster (pembe renkli)
-            let nameHtml = isOwn ? '' : \`<span class="sender-name">\${data.username}</span>\`;
+            let contentHtml = '';
             
-            // Tik işareti (sadece kendi mesajımızsa)
+            // Eğer fotoğraf varsa
+            if (data.image) {
+                contentHtml += \`<img src="\${data.image}" class="msg-image" onclick="window.open(this.src)">\`;
+            }
+            // Eğer metin varsa
+            if (data.text) {
+                contentHtml += \`<span>\${data.text}</span>\`;
+            }
+
+            let nameHtml = isOwn ? '' : \`<span class="sender-name">\${data.username}</span>\`;
             let tickHtml = isOwn ? '<i class="fas fa-check-double tick"></i>' : '';
 
             bubble.innerHTML = \`
                 \${nameHtml}
-                \${data.text}
+                \${contentHtml}
                 <div class="meta">
                     <span>\${time}</span>
                     \${tickHtml}
@@ -169,26 +200,45 @@ const htmlContent = `
             chatArea.scrollTop = chatArea.scrollHeight;
         }
 
-        // Mesaj Gönderme
+        // Metin Gönderme
         chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            if (messageInput.value && myUsername) {
-                const data = { username: myUsername, text: messageInput.value };
+            if (messageInput.value) {
+                const data = { 
+                    room: myRoom,
+                    username: myUsername, 
+                    text: messageInput.value,
+                    image: null
+                };
                 socket.emit('chat message', data);
-                // Kendi ekranımıza hemen düşsün (optimistic UI)
-                // appendMessage({ ...data, createdAt: new Date() }); // Socket'ten geleni beklemek daha güvenli sırası karışmaz
                 messageInput.value = '';
             }
         });
 
-        // Sunucudan Mesaj Gelince
-        socket.on('chat message', (data) => {
-            appendMessage(data);
+        // Fotoğraf Gönderme (Base64'e çevirir)
+        fileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    const data = {
+                        room: myRoom,
+                        username: myUsername,
+                        text: null, // Sadece resim olabilir
+                        image: evt.target.result // Base64 veri
+                    };
+                    socket.emit('chat message', data);
+                };
+                reader.readAsDataURL(file);
+                this.value = ''; // Inputu temizle
+            }
         });
 
-        // Eski Mesajlar
+        // Socket Olayları
+        socket.on('chat message', (data) => appendMessage(data));
+        
         socket.on('load old messages', (msgs) => {
-            chatArea.innerHTML = ''; // Temizle
+            chatArea.innerHTML = '';
             msgs.forEach(msg => appendMessage(msg));
         });
 
@@ -199,21 +249,34 @@ const htmlContent = `
 
 app.get('/', (req, res) => res.send(htmlContent));
 
-// --- SOCKET ---
-io.on('connection', async (socket) => {
-    try {
-        const oldMessages = await Message.find().sort({ createdAt: 1 }).limit(50);
-        socket.emit('load old messages', oldMessages);
-    } catch (err) {}
+// --- SOCKET LOGIC ---
+io.on('connection', (socket) => {
+    
+    // Odaya Katılma
+    socket.on('join room', async ({ username, room }) => {
+        socket.join(room); // Kullanıcıyı odaya sok
+        console.log(\`\${username}, \${room} odasına katıldı.\`);
 
+        // Sadece o odadaki eski mesajları getir
+        try {
+            const oldMessages = await Message.find({ room: room }).sort({ createdAt: 1 }).limit(50);
+            socket.emit('load old messages', oldMessages);
+        } catch (err) {}
+    });
+
+    // Mesaj Geldiğinde
     socket.on('chat message', async (data) => {
-        const newMessage = new Message({ 
-            username: data.username, 
+        // Veritabanına kaydet
+        const newMessage = new Message({
+            room: data.room,
+            username: data.username,
             text: data.text,
-            createdAt: new Date()
+            image: data.image
         });
         await newMessage.save();
-        io.emit('chat message', newMessage);
+
+        // Sadece o odadaki insanlara gönder (broadcast to room)
+        io.to(data.room).emit('chat message', newMessage);
     });
 });
 
