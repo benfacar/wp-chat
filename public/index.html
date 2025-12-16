@@ -3,19 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WhatsApp Ultra</title>
-    
+    <title>WhatsApp Master</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#008069">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/124/124034.png">
-    
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    
     <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.4/dist/index.min.js"></script>
 </head>
 <body>
     <audio id="notification-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"></audio>
+    <audio id="ringtone" src="https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3" loop></audio>
+
+    <div id="video-modal" class="hidden">
+        <div class="video-container">
+            <video id="remote-video" autoplay playsinline></video>
+            <video id="local-video" autoplay playsinline muted></video>
+            <div class="video-controls">
+                <button id="end-call-btn"><i class="fas fa-phone-slash"></i></button>
+            </div>
+            <div id="incoming-call-ui" class="hidden">
+                <span id="caller-name">Arıyor...</span>
+                <div class="call-actions">
+                    <button id="accept-call-btn" style="background:#00a884"><i class="fas fa-phone"></i></button>
+                    <button id="reject-call-btn" style="background:red"><i class="fas fa-phone-slash"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div id="login-screen">
         <div id="login-box">
@@ -28,10 +42,19 @@
 
     <div id="app-container">
         <header>
-            <div class="avatar"><i class="fas fa-users"></i></div>
-            <div class="header-info">
-                <div class="header-name">Sohbet <span id="room-display" style="font-weight:normal; font-size:0.8em"></span></div>
-                <div class="header-status" id="status-text">Bağlanıyor...</div>
+            <div class="header-left">
+                <div class="avatar-wrapper">
+                    <div class="avatar"><i class="fas fa-users"></i></div>
+                    <div id="online-indicator" class="online-dot hidden"></div>
+                </div>
+                <div class="header-info">
+                    <div class="header-name">Sohbet <span id="room-display" style="font-weight:normal; font-size:0.8em"></span></div>
+                    <div class="header-status" id="status-text">Bağlanıyor...</div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button id="video-call-btn" title="Görüntülü Ara"><i class="fas fa-video"></i></button>
+                <button id="theme-btn" title="Karanlık Mod"><i class="fas fa-moon"></i></button>
             </div>
         </header>
 
@@ -53,7 +76,6 @@
 
             <form id="chat-form" style="flex: 1; display: flex; gap: 5px; align-items: center;">
                 <input type="text" id="message-input" placeholder="Mesaj..." autocomplete="off">
-                
                 <button type="button" class="icon-btn" id="mic-btn"><i class="fas fa-microphone"></i></button>
                 <button type="submit" class="icon-btn send-btn" id="send-btn" style="display:none"><i class="fas fa-paper-plane"></i></button>
             </form>

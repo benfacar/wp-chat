@@ -2,8 +2,13 @@ const socket = io();
 let myUsername = "", myRoom = "", typingTimeout, currentReply = null;
 let mediaRecorder, audioChunks = [];
 
-// Elementler
-const elements = {
+// Video Arama Değişkenleri
+let localStream;
+let peerConnection;
+const rtcSettings = { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }] };
+
+// Element Seçicileri
+const els = {
     loginScreen: document.getElementById('login-screen'),
     usernameInput: document.getElementById('username-input'),
     roomInput: document.getElementById('room-input'),
@@ -16,80 +21,175 @@ const elements = {
     roomDisplay: document.getElementById('room-display'),
     statusText: document.getElementById('status-text'),
     notifSound: document.getElementById('notification-sound'),
+    ringtone: document.getElementById('ringtone'),
     replyPreview: document.getElementById('reply-preview'),
     replyUser: document.getElementById('reply-user'),
     replyText: document.getElementById('reply-text'),
     micBtn: document.getElementById('mic-btn'),
     sendBtn: document.getElementById('send-btn'),
     emojiBtn: document.getElementById('emoji-btn'),
-    locationBtn: document.getElementById('location-btn')
+    locationBtn: document.getElementById('location-btn'),
+    themeBtn: document.getElementById('theme-btn'),
+    onlineDot: document.getElementById('online-indicator'),
+    videoCallBtn: document.getElementById('video-call-btn'),
+    videoModal: document.getElementById('video-modal'),
+    localVideo: document.getElementById('local-video'),
+    remoteVideo: document.getElementById('remote-video'),
+    endCallBtn: document.getElementById('end-call-btn'),
+    incomingCallUI: document.getElementById('incoming-call-ui'),
+    callerName: document.getElementById('caller-name'),
+    acceptCallBtn: document.getElementById('accept-call-btn'),
+    rejectCallBtn: document.getElementById('reject-call-btn')
 };
 
-// --- EMOJI PANELİ ---
+// --- EMOJI & THEME ---
 const picker = new EmojiButton();
-picker.on('emoji', selection => {
-    elements.messageInput.value += selection.emoji;
-    checkInput(); // Buton durumunu guncelle
+picker.on('emoji', s => { els.messageInput.value += s.emoji; checkInput(); });
+els.emojiBtn.addEventListener('click', () => picker.togglePicker(els.emojiBtn));
+
+els.themeBtn.addEventListener('click', () => {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    const newTheme = isDark ? 'light' : 'dark';
+    document.body.setAttribute('data-theme', newTheme);
+    els.themeBtn.innerHTML = isDark ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
 });
-elements.emojiBtn.addEventListener('click', () => picker.togglePicker(elements.emojiBtn));
 
 // --- GİRİŞ ---
-elements.joinBtn.addEventListener('click', () => {
-    if (elements.usernameInput.value && elements.roomInput.value) {
-        myUsername = elements.usernameInput.value.trim();
-        myRoom = elements.roomInput.value.trim();
+els.joinBtn.addEventListener('click', () => {
+    if (els.usernameInput.value && els.roomInput.value) {
+        myUsername = els.usernameInput.value.trim();
+        myRoom = els.roomInput.value.trim();
         socket.emit('join room', { username: myUsername, room: myRoom });
-        elements.roomDisplay.textContent = myRoom;
-        elements.loginScreen.style.display = 'none';
-        elements.appContainer.style.display = 'flex';
+        els.roomDisplay.textContent = myRoom;
+        els.loginScreen.style.display = 'none';
+        els.appContainer.style.display = 'flex';
     } else { alert("İsim ve oda zorunlu!"); }
 });
 
-// --- MESAJ YÖNETİMİ ---
+// --- VİDEO ARAMA MANTIĞI (WebRTC) ---
+els.videoCallBtn.addEventListener('click', startCall);
+els.endCallBtn.addEventListener('click', endCall);
+els.rejectCallBtn.addEventListener('click', () => {
+    els.incomingCallUI.classList.add('hidden');
+    els.ringtone.pause();
+    socket.emit('reject-call', { room: myRoom });
+});
+els.acceptCallBtn.addEventListener('click', async () => {
+    els.incomingCallUI.classList.add('hidden');
+    els.ringtone.pause();
+    await initializeMedia();
+    socket.emit('accept-call', { room: myRoom });
+});
+
+async function initializeMedia() {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        els.localVideo.srcObject = localStream;
+        els.videoModal.classList.remove('hidden');
+    } catch(err) { alert("Kameraya erişilemedi!"); console.error(err); }
+}
+
+async function startCall() {
+    await initializeMedia();
+    createPeerConnection();
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    socket.emit('call-user', { offer, room: myRoom });
+}
+
+function createPeerConnection() {
+    peerConnection = new RTCPeerConnection(rtcSettings);
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+    
+    peerConnection.ontrack = event => { els.remoteVideo.srcObject = event.streams[0]; };
+    peerConnection.onicecandidate = event => {
+        if (event.candidate) socket.emit('ice-candidate', { candidate: event.candidate, room: myRoom });
+    };
+}
+
+function endCall() {
+    if (peerConnection) peerConnection.close();
+    if (localStream) localStream.getTracks().forEach(track => track.stop());
+    els.videoModal.classList.add('hidden');
+    els.incomingCallUI.classList.add('hidden');
+    els.ringtone.pause();
+    socket.emit('end-call', { room: myRoom });
+}
+
+// Socket: Video Sinyalleri
+socket.on('call-made', async (data) => {
+    // Başkası arıyor
+    els.videoModal.classList.remove('hidden');
+    els.incomingCallUI.classList.remove('hidden');
+    els.callerName.textContent = "Gelen Arama...";
+    els.ringtone.currentTime = 0;
+    els.ringtone.play();
+    
+    createPeerConnection();
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+    
+    // Cevapla butonuna basılınca çalışacak mantık acceptCallBtn içinde
+    els.acceptCallBtn.onclick = async () => {
+        els.incomingCallUI.classList.add('hidden');
+        els.ringtone.pause();
+        if(!localStream) await initializeMedia(); // Eğer kamerayı açmadıysak aç
+        
+        // Yeniden stream ekle (garanti olsun)
+        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit('make-answer', { answer, room: myRoom });
+    };
+});
+
+socket.on('answer-made', async (data) => {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+});
+
+socket.on('ice-candidate', async (data) => {
+    if (peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+});
+
+socket.on('call-rejected', () => { alert("Arama reddedildi."); endCall(); });
+socket.on('call-ended', () => { endCall(); });
+
+
+// --- MESAJ & ODA MANTIĞI ---
 function checkInput() {
-    if (elements.messageInput.value.trim().length > 0) {
-        elements.micBtn.style.display = 'none';
-        elements.sendBtn.style.display = 'block';
+    if (els.messageInput.value.trim().length > 0) {
+        els.micBtn.style.display = 'none';
+        els.sendBtn.style.display = 'block';
     } else {
-        elements.micBtn.style.display = 'block';
-        elements.sendBtn.style.display = 'none';
+        els.micBtn.style.display = 'block';
+        els.sendBtn.style.display = 'none';
     }
 }
-elements.messageInput.addEventListener('input', () => {
+els.messageInput.addEventListener('input', () => {
     checkInput();
     socket.emit('typing', { room: myRoom, username: myUsername });
     clearTimeout(typingTimeout);
     typingTimeout = setTimeout(() => socket.emit('stop typing', { room: myRoom }), 2000);
 });
 
-// --- YANITLAMA ---
-window.cancelReply = function() {
-    currentReply = null;
-    elements.replyPreview.style.display = 'none';
-};
+window.cancelReply = function() { currentReply = null; els.replyPreview.style.display = 'none'; };
 
 function appendMessage(data) {
     const existingMsg = document.getElementById('msg-' + data._id);
-    let contentHtml = '';
-    let deletedClass = '';
-
+    let contentHtml = '', deletedClass = '';
+    
     if (data.isDeleted) {
         contentHtml = '<div class="deleted-msg"><i class="fas fa-ban"></i> Bu mesaj silindi</div>';
         deletedClass = 'deleted';
     } else {
-        if (data.replyTo && data.replyTo.username) {
-            contentHtml += `<div class="reply-bubble"><strong>${data.replyTo.username}</strong><span>${data.replyTo.text || 'Medya'}</span></div>`;
-        }
+        if (data.replyTo && data.replyTo.username) contentHtml += `<div class="reply-bubble"><strong>${data.replyTo.username}</strong><span>${data.replyTo.text || 'Medya'}</span></div>`;
         if (data.image) contentHtml += `<img src="${data.image}" class="msg-image" onclick="window.open(this.src)">`;
         if (data.audio) contentHtml += `<audio controls src="${data.audio}"></audio>`;
-        if (data.location) contentHtml += `<a href="${data.location}" target="_blank" class="location-link"><i class="fas fa-map-marker-alt"></i> Konumu Haritada Gör</a>`;
+        if (data.location) contentHtml += `<a href="${data.location}" target="_blank" class="location-link"><i class="fas fa-map-marker-alt"></i> Konum</a>`;
         if (data.text) contentHtml += `<span>${data.text}</span>`;
     }
 
-    if (existingMsg) {
-        existingMsg.querySelector('.bubble-content').innerHTML = contentHtml;
-        return;
-    }
+    if (existingMsg) { existingMsg.querySelector('.bubble-content').innerHTML = contentHtml; return; }
 
     const isOwn = data.username === myUsername;
     const time = new Date(data.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -98,115 +198,52 @@ function appendMessage(data) {
     row.id = 'msg-' + data._id;
 
     let nameHtml = isOwn ? '' : `<span class="sender-name">${data.username}</span>`;
-    let tickHtml = isOwn ? '<i class="fas fa-check-double tick"></i>' : '';
-
     const bubble = document.createElement('div');
     bubble.className = 'bubble ' + deletedClass;
 
     if (!data.isDeleted) {
         bubble.ondblclick = () => {
-            currentReply = { username: data.username, text: data.text || 'Medya/Konum' };
-            elements.replyUser.innerText = currentReply.username;
-            elements.replyText.innerText = currentReply.text;
-            elements.replyPreview.style.display = 'flex';
-            elements.messageInput.focus();
+            currentReply = { username: data.username, text: data.text || 'Medya' };
+            els.replyUser.innerText = currentReply.username;
+            els.replyText.innerText = currentReply.text;
+            els.replyPreview.style.display = 'flex';
+            els.messageInput.focus();
         };
-        if (isOwn) {
-            bubble.oncontextmenu = (e) => {
-                e.preventDefault();
-                if (confirm('Silmek istiyor musun?')) socket.emit('delete message', { msgId: data._id, room: myRoom });
-            };
-        }
+        if (isOwn) bubble.oncontextmenu = (e) => { e.preventDefault(); if(confirm('Sil?')) socket.emit('delete message', { msgId: data._id, room: myRoom }); };
     }
-
-    bubble.innerHTML = `${nameHtml}<div class="bubble-content">${contentHtml}</div><div class="meta"><span>${time}</span>${tickHtml}</div>`;
-    elements.chatArea.appendChild(row);
-    elements.chatArea.scrollTop = elements.chatArea.scrollHeight;
+    bubble.innerHTML = `${nameHtml}<div class="bubble-content">${contentHtml}</div><div class="meta"><span>${time}</span>${isOwn ? '<i class="fas fa-check-double tick"></i>' : ''}</div>`;
+    els.chatArea.appendChild(row);
+    els.chatArea.scrollTop = els.chatArea.scrollHeight;
 }
 
-// --- GÖNDERME ---
-elements.chatForm.addEventListener('submit', (e) => {
+els.chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    if (elements.messageInput.value) {
-        const data = { 
-            room: myRoom, username: myUsername, text: elements.messageInput.value, 
-            image: null, audio: null, location: null, replyTo: currentReply 
-        };
-        socket.emit('chat message', data);
-        elements.messageInput.value = '';
-        checkInput();
-        cancelReply();
-        socket.emit('stop typing', { room: myRoom });
+    if (els.messageInput.value) {
+        socket.emit('chat message', { room: myRoom, username: myUsername, text: els.messageInput.value, replyTo: currentReply });
+        els.messageInput.value = ''; checkInput(); cancelReply(); socket.emit('stop typing', { room: myRoom });
     }
 });
 
-// --- KONUM ATMA ---
-elements.locationBtn.addEventListener('click', () => {
-    if (!navigator.geolocation) return alert("Tarayıcınız konumu desteklemiyor");
-    elements.locationBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    navigator.geolocation.getCurrentPosition(position => {
-        const link = `https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`;
-        socket.emit('chat message', { room: myRoom, username: myUsername, location: link, text: null });
-        elements.locationBtn.innerHTML = '<i class="fas fa-map-marker-alt"></i>';
-    }, () => {
-        alert("Konum alınamadı.");
-        elements.locationBtn.innerHTML = '<i class="fas fa-map-marker-alt"></i>';
-    });
+// Konum & Ses & Dosya (Aynı mantık, kısaltıldı)
+els.locationBtn.addEventListener('click', () => {
+    navigator.geolocation.getCurrentPosition(p => socket.emit('chat message', { room: myRoom, username: myUsername, location: `http://maps.google.com/?q=${p.coords.latitude},${p.coords.longitude}` }));
 });
+els.micBtn.addEventListener('mousedown', startRec); els.micBtn.addEventListener('mouseup', stopRec); els.micBtn.addEventListener('touchstart', (e)=>{e.preventDefault();startRec()}); els.micBtn.addEventListener('touchend', (e)=>{e.preventDefault();stopRec()});
+async function startRec() { try { const s = await navigator.mediaDevices.getUserMedia({audio:true}); mediaRecorder = new MediaRecorder(s); audioChunks=[]; mediaRecorder.ondataavailable=e=>audioChunks.push(e.data); mediaRecorder.onstop=()=>{const r=new FileReader();r.readAsDataURL(new Blob(audioChunks));r.onloadend=()=>socket.emit('chat message',{room:myRoom,username:myUsername,audio:r.result});s.getTracks().forEach(t=>t.stop())}; mediaRecorder.start(); els.micBtn.classList.add('recording'); } catch(e){alert("Mic Hata")} }
+function stopRec() { if(mediaRecorder && mediaRecorder.state!=="inactive"){mediaRecorder.stop();els.micBtn.classList.remove('recording')} }
+els.fileInput.addEventListener('change', function() { if(this.files[0]){const r=new FileReader();r.onload=e=>socket.emit('chat message',{room:myRoom,username:myUsername,image:e.target.result});r.readAsDataURL(this.files[0]);this.value=''} });
 
-// --- SES KAYIT ---
-elements.micBtn.addEventListener('mousedown', startRecording);
-elements.micBtn.addEventListener('mouseup', stopRecording);
-elements.micBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
-elements.micBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRecording(); });
+// Socket Olayları
+socket.on('chat message', d => { appendMessage(d); if(d.username!==myUsername && !d.isDeleted) els.notifSound.play().catch(()=>{}); });
+socket.on('load old messages', msgs => { els.chatArea.innerHTML=''; msgs.forEach(m=>appendMessage(m)); });
+socket.on('message updated', d => appendMessage(d));
+socket.on('typing', d => { if(d.username!==myUsername) { els.statusText.textContent = d.username + " yazıyor..."; els.statusText.classList.add('typing-indicator'); }});
+socket.on('stop typing', () => { els.statusText.classList.remove('typing-indicator'); socket.emit('get room count', myRoom); });
 
-async function startRecording() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-        mediaRecorder.addEventListener("dataavailable", event => audioChunks.push(event.data));
-        mediaRecorder.addEventListener("stop", () => {
-            const reader = new FileReader();
-            reader.readAsDataURL(new Blob(audioChunks, { type: 'audio/webm' }));
-            reader.onloadend = () => {
-                socket.emit('chat message', { room: myRoom, username: myUsername, audio: reader.result });
-            };
-            stream.getTracks().forEach(track => track.stop());
-        });
-        mediaRecorder.start();
-        elements.micBtn.classList.add('recording');
-    } catch (err) { alert("Mikrofon hatası!"); }
-}
-function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-        elements.micBtn.classList.remove('recording');
-    }
-}
-
-// --- DOSYA ---
-elements.fileInput.addEventListener('change', function() {
-    if (this.files[0]) {
-        const reader = new FileReader();
-        reader.onload = (e) => socket.emit('chat message', { room: myRoom, username: myUsername, image: e.target.result });
-        reader.readAsDataURL(this.files[0]);
-        this.value = '';
-    }
+// ONLINE DURUMU VE ODA BİLGİSİ
+socket.on('room data', ({ count, users }) => {
+    els.statusText.textContent = count + " kişi çevrimiçi";
+    // Odada benden başka biri varsa yeşil nokta yak
+    if (count > 1) els.onlineDot.classList.remove('hidden');
+    else els.onlineDot.classList.add('hidden');
 });
-
-// --- SOCKET OLAYLARI ---
-socket.on('chat message', (data) => {
-    appendMessage(data);
-    if (data.username !== myUsername && !data.isDeleted) elements.notifSound.play().catch(()=>{});
-});
-socket.on('load old messages', (msgs) => { elements.chatArea.innerHTML = ''; msgs.forEach(msg => appendMessage(msg)); });
-socket.on('message updated', (data) => appendMessage(data));
-socket.on('room data', ({ count }) => { elements.statusText.textContent = count + " kişi odada"; });
-socket.on('typing', (data) => { if(data.username !== myUsername) { elements.statusText.textContent = data.username + " yazıyor..."; elements.statusText.classList.add('typing-indicator'); } });
-socket.on('stop typing', () => { elements.statusText.classList.remove('typing-indicator'); socket.emit('get room count', myRoom); });
-
-// --- PWA SERVICE WORKER (Basit) ---
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-}
