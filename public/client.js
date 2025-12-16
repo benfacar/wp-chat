@@ -39,6 +39,10 @@ function appendMessage(data) {
         deletedClass = 'deleted';
     } else {
         if (data.image) contentHtml += '<img src="' + data.image + '" class="msg-image" onclick="window.open(this.src)">';
+	if (data.audio) {
+            contentHtml += '<audio controls src="' + data.audio + '"></audio>';
+        }
+        
         if (data.text) contentHtml += '<span>' + data.text + '</span>';
     }
 
@@ -131,3 +135,63 @@ socket.on('stop typing', () => {
     statusText.classList.remove('typing-indicator');
     socket.emit('get room count', myRoom);
 });
+
+// --- SES KAYIT SİSTEMİ ---
+const micBtn = document.getElementById('mic-btn');
+let mediaRecorder;
+let audioChunks = [];
+
+// Mikrofona basılınca (Masaüstü ve Mobil uyumlu)
+const startRecording = async () => {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.addEventListener("dataavailable", event => {
+            audioChunks.push(event.data);
+        });
+
+        mediaRecorder.addEventListener("stop", () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = () => {
+                const base64Audio = reader.result;
+                // Ses verisini sunucuya resim gibi gönderiyoruz ama 'audio' etiketiyle
+                const data = { 
+                    room: myRoom, 
+                    username: myUsername, 
+                    text: null, 
+                    image: null,
+                    audio: base64Audio // Yeni alan
+                };
+                socket.emit('chat message', data);
+            };
+            
+            // Mikrofonu kapat
+            stream.getTracks().forEach(track => track.stop());
+        });
+
+        mediaRecorder.start();
+        micBtn.classList.add('recording'); // Görsel efekt
+    } catch (err) {
+        console.error("Mikrofon hatası:", err);
+        alert("Mikrofona erişilemedi!");
+    }
+};
+
+const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+        micBtn.classList.remove('recording');
+    }
+};
+
+// Hem Fare (PC) hem Dokunmatik (Mobil) Olayları
+micBtn.addEventListener('mousedown', startRecording);
+micBtn.addEventListener('mouseup', stopRecording);
+micBtn.addEventListener('mouseleave', stopRecording); // Butondan kayarsa
+
+micBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
+micBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRecording(); });

@@ -28,6 +28,7 @@ const MessageSchema = new mongoose.Schema({
     username: String,
     text: String,
     image: String,
+    audio: String,
     createdAt: { type: Date, default: Date.now },
     isDeleted: { type: Boolean, default: false }
 });
