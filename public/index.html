@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WhatsApp Expert</title>
+    <title>WhatsApp Ultimate</title>
     <link rel="manifest" href="manifest.json">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -12,6 +12,29 @@
 <body>
     <audio id="notification-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"></audio>
     <audio id="ringtone" src="https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3" loop></audio>
+
+    <div id="context-menu" class="hidden">
+        <div class="menu-item" id="ctx-reply"><i class="fas fa-reply"></i> Yanıtla</div>
+        <div class="menu-item" id="ctx-react"><i class="far fa-heart"></i> Tepki Ver</div>
+        <div class="menu-item delete" id="ctx-delete"><i class="fas fa-trash"></i> Sil</div>
+    </div>
+
+    <div id="reaction-picker" class="hidden">
+        <span onclick="sendReaction('❤️')">❤️</span>
+        <span onclick="sendReaction('😂')">😂</span>
+        <span onclick="sendReaction('😮')">😮</span>
+        <span onclick="sendReaction('😢')">😢</span>
+        <span onclick="sendReaction('😡')">😡</span>
+        <span onclick="sendReaction('👍')">👍</span>
+    </div>
+
+    <div id="gif-modal" class="hidden">
+        <div class="gif-container">
+            <h3>GIF Gönder</h3>
+            <div id="gif-grid"></div>
+            <button onclick="document.getElementById('gif-modal').classList.add('hidden')">Kapat</button>
+        </div>
+    </div>
 
     <div id="video-modal" class="hidden">
         <div class="video-container">
@@ -41,21 +64,20 @@
             <h2>WhatsApp Giriş</h2>
             <input type="text" id="username-input" class="login-input" placeholder="Adınız" autocomplete="off">
             <input type="text" id="room-input" class="login-input" placeholder="Oda İsmi" autocomplete="off">
-            <input type="password" id="password-input" class="login-input" placeholder="Oda Şifresi (Oluştur/Gir)" autocomplete="off">
-            <button id="join-btn">Sohbete Katıl</button>
-            <p style="font-size:11px; color:#555; margin-top:10px;">* Odayı ilk kuran şifreyi belirler.</p>
+            <input type="password" id="password-input" class="login-input" placeholder="Oda Şifresi" autocomplete="off">
+            <button id="join-btn">Katıl</button>
         </div>
     </div>
 
     <div id="app-container">
         <header>
-            <div class="header-left" onclick="toggleUserList()" style="cursor:pointer">
+            <div class="header-left" onclick="toggleUserList()">
                 <div class="avatar-wrapper">
                     <div class="avatar"><i class="fas fa-users"></i></div>
                     <div id="online-indicator" class="online-dot hidden"></div>
                 </div>
                 <div class="header-info">
-                    <div class="header-name">Sohbet <span id="room-display" style="font-weight:normal; font-size:0.8em"></span></div>
+                    <div class="header-name"><span id="room-display"></span></div>
                     <div class="header-status" id="status-text">Bağlanıyor...</div>
                 </div>
             </div>
@@ -73,6 +95,7 @@
             </div>
             <div class="footer-buttons">
                 <button class="icon-btn" id="emoji-btn"><i class="far fa-smile"></i></button>
+                <button class="icon-btn" id="gif-btn" style="font-size:14px; border:2px solid #555; border-radius:5px; padding:2px 5px; font-weight:bold;">GIF</button>
                 <button class="icon-btn" onclick="document.getElementById('file-input').click()"><i class="fas fa-paperclip"></i></button>
                 <input type="file" id="file-input" accept="image/*">
                 <button class="icon-btn" id="location-btn"><i class="fas fa-map-marker-alt"></i></button>
